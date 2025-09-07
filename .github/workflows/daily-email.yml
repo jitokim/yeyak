@@ -50,12 +50,18 @@ jobs:
 
       - name: Compose email body
         id: compose
+        shell: bash
         run: |
-          BODY="$(python compose_email.py)"
+          # compose_email.py 실행 결과를 파일로 저장
+          python compose_email.py > body.txt
+
+          # 본문 안에 'EOF' 같은 구분자가 섞이지 않도록 무작위 구분자 생성
+          DELIM=$(uuidgen)
+
           {
-            echo "body<<'EOF'"
-            echo "$BODY"
-            echo "EOF"
+            echo "body<<$DELIM"
+            cat body.txt
+            echo "$DELIM"
           } >> "$GITHUB_OUTPUT"
 
       - name: Send email
