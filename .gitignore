@@ -1,0 +1,7 @@
+# Local env file (do not commit secrets)
+.env
+
+# Python caches
+__pycache__/
+*.pyc
+

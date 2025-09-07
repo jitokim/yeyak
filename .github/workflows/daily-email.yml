@@ -1,0 +1,72 @@
+name: Daily Seoul Reservation Email
+on:
+  schedule:
+    - cron: "0 0 * * *"  # 09:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load .env
+        run: |
+          if [ -f .env ]; then
+            # Export key=value lines to GITHUB_ENV (ignores comments/blank lines)
+            grep -E '^[A-Za-z_][A-Za-z0-9_]*=' .env >> "$GITHUB_ENV"
+          fi
+
+      - name: Resolve env with Secrets priority
+        run: |
+          # Prefer GitHub Secrets if present; fallback to .env values
+          resolve() {
+            key="$1"; secret_val="$2"; env_val="$3"
+            if [ -n "$secret_val" ]; then
+              echo "$key=$secret_val" >> "$GITHUB_ENV"
+            elif [ -n "$env_val" ]; then
+              echo "$key=$env_val" >> "$GITHUB_ENV"
+            fi
+          }
+          resolve SEOUL_API_KEY "${{ secrets.SEOUL_API_KEY }}" "${SEOUL_API_KEY:-}"
+          resolve MAIL_USERNAME "${{ secrets.MAIL_USERNAME }}" "${MAIL_USERNAME:-}"
+          resolve MAIL_PASSWORD "${{ secrets.MAIL_PASSWORD }}" "${MAIL_PASSWORD:-}"
+          # MAIL_TO is non-secret, prefer .env value if present, else keep existing
+          if [ -n "${MAIL_TO:-}" ]; then echo "MAIL_TO=${MAIL_TO}" >> "$GITHUB_ENV"; fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Fetch reservations
+        run: python fetch_reservations.py
+
+      - name: Compose email body
+        id: compose
+        run: |
+          BODY="$(python compose_email.py)"
+          {
+            echo "body<<'EOF'"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ env.MAIL_USERNAME }}
+          password: ${{ env.MAIL_PASSWORD }}
+          subject: "서울시 예약: 일일 알림"
+          to: ${{ env.MAIL_TO }}
+          from: GitHub Actions <${{ env.MAIL_USERNAME }}>
+          body: ${{ steps.compose.outputs.body }}
+          attachments: seoul_education_v12.json, seoul_education_v123.json
