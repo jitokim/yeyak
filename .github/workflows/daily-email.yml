@@ -10,6 +10,8 @@ permissions:
 jobs:
   email:
     runs-on: ubuntu-latest
+    env:
+      MAIL_TO: ${{ vars.MAIL_TO }}
     steps:
       - uses: actions/checkout@v4
 
